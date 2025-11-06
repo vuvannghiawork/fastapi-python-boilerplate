@@ -2,36 +2,113 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 
+# import uvicorn
+from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+
+
+# Database configurations
+SQLALCHEMY_DATABASE_URL = "sqlite:///./database.db"
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+
+
+
+
+
+# SQLAlchemy models
+class Item(Base):
+    __tablename__ = "items"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    description = Column(String, index=True)
+
+
+Base.metadata.create_all(bind=engine)
+
+# FastAPI app instance
 app = FastAPI(
-    title="Vercel + FastAPI",
-    description="Vercel + FastAPI",
-    version="1.0.0",
+    # title="Vercel + FastAPI",
+    # description="Vercel + FastAPI",
+    # version="1.0.0",
 )
 
 
-@app.get("/api/data")
-def get_sample_data():
-    return {
-        "data": [
-            {"id": 1, "name": "Sample Item 1", "value": 100},
-            {"id": 2, "name": "Sample Item 2", "value": 200},
-            {"id": 3, "name": "Sample Item 3", "value": 300}
-        ],
-        "total": 3,
-        "timestamp": "2024-01-01T00:00:00Z"
-    }
 
 
-@app.get("/api/items/{item_id}")
-def get_item(item_id: int):
-    return {
-        "item": {
-            "id": item_id,
-            "name": "Sample Item " + str(item_id),
-            "value": item_id * 100
-        },
-        "timestamp": "2024-01-01T00:00:00Z"
-    }
+
+
+# CRUD operations
+# Create (Create)
+@app.post("/items/")
+async def create_item(name: str, description: str):
+    db = SessionLocal()
+    db_item = Item(name=name, description=description)
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+
+# Read (GET)
+@app.get("/items/{item_id}")
+async def read_item(item_id: int):
+    db = SessionLocal()
+    item = db.query(Item).filter(Item.id == item_id).first()
+    return item
+
+
+# Update (PUT)
+@app.put("/items/{item_id}")
+async def update_item(item_id: int, name: str, description: str):
+    db = SessionLocal()
+    db_item = db.query(Item).filter(Item.id == item_id).first()
+    db_item.name = name
+    db_item.description = description
+    db.commit()
+    return db_item
+
+
+# Delete (DELETE)
+@app.delete("/items/{item_id}")
+async def delete_item(item_id: int):
+    db = SessionLocal()
+    db_item = db.query(Item).filter(Item.id == item_id).first()
+    db.delete(db_item)
+    db.commit()
+    return {"message": "Item deleted successfully"}
+
+ 
+
+
+
+# @app.get("/api/data")
+# def get_sample_data():
+#     return {
+#         "data": [
+#             {"id": 1, "name": "Sample Item 1", "value": 100},
+#             {"id": 2, "name": "Sample Item 2", "value": 200},
+#             {"id": 3, "name": "Sample Item 3", "value": 300}
+#         ],
+#         "total": 3,
+#         "timestamp": "2024-01-01T00:00:00Z"
+#     }
+
+
+# @app.get("/api/items/{item_id}")
+# def get_item(item_id: int):
+#     return {
+#         "item": {
+#             "id": item_id,
+#             "name": "Sample Item " + str(item_id),
+#             "value": item_id * 100
+#         },
+#         "timestamp": "2024-01-01T00:00:00Z"
+#     }
 
 
 @app.get("/", response_class=HTMLResponse)
