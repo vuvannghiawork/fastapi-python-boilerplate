@@ -2,25 +2,21 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 
-# import uvicorn
 from sqlalchemy import Column, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 
 
-# Database configurations
-SQLALCHEMY_DATABASE_URL = "sqlite:///./database.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-
-
-
-
-# SQLAlchemy models
+# Mô hình SQLAlchemy
 class Item(Base):
     __tablename__ = "items"
     id = Column(Integer, primary_key=True, index=True)
@@ -30,7 +26,7 @@ class Item(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# FastAPI app instance
+# Thể hiện ứng dụng FastAPI
 app = FastAPI(
     # title="Vercel + FastAPI",
     # description="Vercel + FastAPI",
@@ -38,15 +34,22 @@ app = FastAPI(
 )
 
 
+# Hàm tiện ích để lấy phiên DB (Dependency)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-
-
+# Thay đổi các endpoint CRUD để sử dụng hàm dependency (tốt hơn cho FastAPI)
+from fastapi import Depends
+from sqlalchemy.orm import Session
 
 # CRUD operations
 # Create (Create)
 @app.post("/api/items/")
-async def create_item(name: str, description: str):
-    db = SessionLocal()
+async def create_item(name: str, description: str, db: Session = Depends(get_db)):
     db_item = Item(name=name, description=description)
     db.add(db_item)
     db.commit()
@@ -56,64 +59,39 @@ async def create_item(name: str, description: str):
 
 # Read (GET)
 @app.get("/api/items/{item_id}")
-async def read_item(item_id: int):
-    db = SessionLocal()
+async def read_item(item_id: int, db: Session = Depends(get_db)):
     item = db.query(Item).filter(Item.id == item_id).first()
     return item
 
 
 # Update (PUT)
 @app.put("/api/items/{item_id}")
-async def update_item(item_id: int, name: str, description: str):
-    db = SessionLocal()
+async def update_item(item_id: int, name: str, description: str, db: Session = Depends(get_db)):
     db_item = db.query(Item).filter(Item.id == item_id).first()
-    db_item.name = name
-    db_item.description = description
-    db.commit()
-    return db_item
+    if db_item:
+        db_item.name = name
+        db_item.description = description
+        db.commit()
+        db.refresh(db_item)
+        return db_item
+    return {"message": "Item not found"}
 
 
 # Delete (DELETE)
 @app.delete("/api/items/{item_id}")
-async def delete_item(item_id: int):
-    db = SessionLocal()
+async def delete_item(item_id: int, db: Session = Depends(get_db)):
     db_item = db.query(Item).filter(Item.id == item_id).first()
-    db.delete(db_item)
-    db.commit()
-    return {"message": "Item deleted successfully"}
+    if db_item:
+        db.delete(db_item)
+        db.commit()
+        return {"message": f"Item {item_id} deleted successfully"}
+    return {"message": "Item not found"}
 
- 
-
-
-
-# @app.get("/api/data")
-# def get_sample_data():
-#     return {
-#         "data": [
-#             {"id": 1, "name": "Sample Item 1", "value": 100},
-#             {"id": 2, "name": "Sample Item 2", "value": 200},
-#             {"id": 3, "name": "Sample Item 3", "value": 300}
-#         ],
-#         "total": 3,
-#         "timestamp": "2024-01-01T00:00:00Z"
-#     }
-
-
-# @app.get("/api/items/{item_id}")
-# def get_item(item_id: int):
-#     return {
-#         "item": {
-#             "id": item_id,
-#             "name": "Sample Item " + str(item_id),
-#             "value": item_id * 100
-#         },
-#         "timestamp": "2024-01-01T00:00:00Z"
-#     }
 
 
 @app.get("/", response_class=HTMLResponse)
 def read_root():
-    return """
+    html_content = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -419,3 +397,5 @@ def read_root():
     </body>
     </html>
     """
+
+    return html_content
